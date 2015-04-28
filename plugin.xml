@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+   <extension
+         point="org.adempiere.base.IColumnCallout">
+      <callout
+            class="org.idempiere.component.PluginCallout"
+            columnName="DateOrdered"
+            tableName="C_Order">
+      </callout>
+   </extension>
+   <extension
+         id="org.plugin.model.Process"
+         point="org.adempiere.base.Process">
+      <process
+            class="org.plugin.model.Process">
+      </process>
+   </extension>
+
+</plugin>
