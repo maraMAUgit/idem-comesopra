@@ -48,8 +48,7 @@ public class PluginDocEvent extends AbstractEventHandler{
 	private String m_processMsg = "";
 	@Override
 	protected void initialize() { 
-	//register EventTopics and TableNames
-		registerTableEvent(IEventTopics.DOC_BEFORE_COMPLETE, MOrder.Table_Name);
+	//register EventTopics and TableNames 
 		registerTableEvent(IEventTopics.DOC_AFTER_COMPLETE, MOrder.Table_Name);
 		log.info("<PLUGIN> REQUEST CALENDAR IS NOW INITIALIZED");
 		}
@@ -70,30 +69,7 @@ public class PluginDocEvent extends AbstractEventHandler{
 			setTrxName(po.get_TrxName());
 			log.info(" topic="+event.getTopic()+" po="+po);
 			if (po instanceof MOrder){
-				if (IEventTopics.DOC_BEFORE_COMPLETE == type){
-					MOrder order = (MOrder)po;
-					setTrxName(trxName);
-					List<MOrderLine> lines = new Query(Env.getCtx(),MOrderLine.Table_Name,"C_Order_ID=?",null)
-					.setParameters(order.getC_Order_ID())
-					.list();
-					for (MOrderLine line:lines){
-						if (line.getProduct().isBOM()){
-							MWorkflow workflow = null;
-							int workflow_id =  MWorkflow.getWorkflowSearchKey(line.getProduct());
-							if(workflow_id > 0) {
-								ProcessInfo pi = new ProcessInfo(line.getProduct().getName(), 0,MOrder.Table_ID, order.get_ID());
-								pi.setAD_User_ID (Env.getAD_User_ID(Env.getCtx()));
-								pi.setAD_Client_ID(Env.getAD_Client_ID(Env.getCtx()));
-								workflow = MWorkflow.get(line.getCtx(), workflow_id);
-								workflow.setAD_Table_ID(MOrder.Table_ID);
-								workflow.startWait(pi);
-								workflow.get_ID();
-							}
-								
-						}
-					}
-				}
-				else if (IEventTopics.DOC_AFTER_COMPLETE == type){
+				if (IEventTopics.DOC_AFTER_COMPLETE == type){
 					
 					//get the Sales Order document
 					MOrder order = (MOrder)po;
