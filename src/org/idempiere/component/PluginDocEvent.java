@@ -17,17 +17,25 @@
 package org.idempiere.component;
 
 import java.sql.Timestamp;
+import java.util.List;
 
 import org.adempiere.base.event.AbstractEventHandler;
 import org.adempiere.base.event.IEventTopics;
 import org.adempiere.base.event.LoginEventData;
+import org.compiere.model.MBPartner;
+import org.compiere.model.MBPartnerLocation;
 import org.compiere.model.MOrder;
+import org.compiere.model.MOrderLine;
 import org.compiere.model.MRequest;
 import org.compiere.model.MRequestType;
 import org.compiere.model.PO;
 import org.compiere.model.Query;
+import org.compiere.process.ProcessInfo;
 import org.compiere.util.CLogger;
 import org.compiere.util.Env;
+import org.compiere.wf.MWorkflow;
+import org.eevolution.model.MPPProductBOM;
+import org.eevolution.model.MPPProductPlanning;
 import org.osgi.service.event.Event;
 
 /**
@@ -41,6 +49,7 @@ public class PluginDocEvent extends AbstractEventHandler{
 	@Override
 	protected void initialize() { 
 	//register EventTopics and TableNames
+		registerTableEvent(IEventTopics.DOC_BEFORE_COMPLETE, MOrder.Table_Name);
 		registerTableEvent(IEventTopics.DOC_AFTER_COMPLETE, MOrder.Table_Name);
 		log.info("<PLUGIN> REQUEST CALENDAR IS NOW INITIALIZED");
 		}
@@ -61,7 +70,30 @@ public class PluginDocEvent extends AbstractEventHandler{
 			setTrxName(po.get_TrxName());
 			log.info(" topic="+event.getTopic()+" po="+po);
 			if (po instanceof MOrder){
-				if (IEventTopics.DOC_AFTER_COMPLETE == type){
+				if (IEventTopics.DOC_BEFORE_COMPLETE == type){
+					MOrder order = (MOrder)po;
+					setTrxName(trxName);
+					List<MOrderLine> lines = new Query(Env.getCtx(),MOrderLine.Table_Name,"C_Order_ID=?",null)
+					.setParameters(order.getC_Order_ID())
+					.list();
+					for (MOrderLine line:lines){
+						if (line.getProduct().isBOM()){
+							MWorkflow workflow = null;
+							int workflow_id =  MWorkflow.getWorkflowSearchKey(line.getProduct());
+							if(workflow_id > 0) {
+								ProcessInfo pi = new ProcessInfo(line.getProduct().getName(), 0,MOrder.Table_ID, order.get_ID());
+								pi.setAD_User_ID (Env.getAD_User_ID(Env.getCtx()));
+								pi.setAD_Client_ID(Env.getAD_Client_ID(Env.getCtx()));
+								workflow = MWorkflow.get(line.getCtx(), workflow_id);
+								workflow.setAD_Table_ID(MOrder.Table_ID);
+								workflow.startWait(pi);
+								workflow.get_ID();
+							}
+								
+						}
+					}
+				}
+				else if (IEventTopics.DOC_AFTER_COMPLETE == type){
 					
 					//get the Sales Order document
 					MOrder order = (MOrder)po;
@@ -73,10 +105,26 @@ public class PluginDocEvent extends AbstractEventHandler{
 					//create new Request event for the Calendar to display
 					MRequest request = new MRequest(Env.getCtx(),0,trxName);
 					request.setC_Order_ID(order.getC_Order_ID());
-					request.setSummary(order.getC_BPartner().getName()+" "+order.getC_Currency().getCurSymbol()+
-							order.getGrandTotal().toString());
 					request.setDateStartPlan(dateStart);
 					request.setDateCompletePlan(dateComplete);
+					
+					//Summary Information that will be displayed on the Dashboard Calendar
+					//get Product Info and Location to Ship to
+					MOrderLine lines[] = order.getLines();
+					StringBuilder buffer = new StringBuilder(order.getC_BPartner().getName()+" "+order.getC_Currency().getCurSymbol()+
+							order.getGrandTotal().toString()+" - ");
+					for (MOrderLine line:lines){
+						buffer = buffer.append(line.getQtyOrdered()+" "+line.getM_Product().getName()+" ");
+					}
+					//
+					MBPartner partner = (MBPartner) order.getC_BPartner();
+					MBPartnerLocation[] locations = partner.getLocations(false);
+					for (MBPartnerLocation loc:locations){
+						if (loc.isShipTo())
+							buffer = buffer.append("Ship to:"+loc.getC_Location().getAddress1()+","+loc.getC_SalesRegion().getName());
+					}
+					
+					request.setSummary(buffer.toString());
 					
 					MRequestType rt = new Query(Env.getCtx(),MRequestType.Table_Name,"Name='Service Request'",null).first();
 					request.setR_RequestType_ID(rt.get_ID());
